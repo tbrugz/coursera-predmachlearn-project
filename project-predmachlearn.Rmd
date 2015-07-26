@@ -1,0 +1,305 @@
+---
+title: "Human Activity Recognition project"
+author: "Telmo Brugnara"
+date: "22-07-2015"
+output: html_document
+---
+
+<!--
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+http://groupware.les.inf.puc-rio.br/har
+-->
+
+## Introduction
+
+Devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* allow users to collect a large amount of data about personal activity relatively inexpensively. People regularly quantify how much of a particular activity they do, but they rarely quantify how well they do it. The *Groupware@LES* research group created a research project to try to predict how well a person executed weight lifting exercises.
+
+To that aim, the project collected data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of this report is to create a machine learning model that may be used to predict the type ("classe") of activity the user was executing based on the accelerometers' iformation. The training data for this project is at [pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and the test data at [pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+More information about the project can be obtained in the [Human Activity Recognition](http://groupware.les.inf.puc-rio.br/har) project from the *Groupware@LES* research group.
+
+<!--
+## What you should submit
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+-->
+
+## Environment setting
+
+First let's setup the R environment
+
+```{r library, message=FALSE, echo=FALSE}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(caret)
+
+#setwd('~/proj/r-sandbox/coursera-predmachlearn/');
+#setwd('~/Telmo/coursera-data-science/');
+```
+
+And download the required training and testing datasets
+
+```{r download, cache=TRUE}
+if(!file.exists('pml-training.csv')) {
+  download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+                ,'pml-training.csv'
+                ,method = "curl"
+                );
+}
+if(!exists("rawTraining")) {
+  rawTraining <- read.csv('pml-training.csv')
+}
+
+if(!file.exists('pml-testing.csv')) {
+  download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+                ,'pml-testing.csv'
+                ,method = "curl"
+                );
+}
+if(!exists("rawTesting")) {
+  rawTesting <- read.csv('pml-testing.csv')
+}
+```
+
+Just showing how many elements of each "classe" the training dataset has
+
+```{r table}
+##table(rawTraining[,names(rawTraining)=="classe"])
+#   A    B    C    D    E
+#5580 3797 3422 3216 3607
+table(rawTraining$classe)
+#   A    B    C    D    E
+#5580 3797 3422 3216 3607
+```
+
+Now partitioning the "raw" training set into `training` and `testing`, since the `rawTesting` dataset has no "classe" attribute to validate the model
+
+```{r partition}
+set.seed(1234)
+inTrain <- createDataPartition(y=rawTraining$classe, p=0.6, list=FALSE)
+training <- rawTraining[inTrain,]
+testing <- rawTraining[-inTrain,]
+#dim(training); dim(testing)
+#asserts:
+#dim(training)[1]+dim(testing)[1]==19622
+#dim(training)[2]==dim(testing)[2]
+```
+
+Some feature selection
+
+```{r featureselection}
+numericalCols <- sapply(rawTraining, is.numeric)
+selectedCols <- numericalCols
+#colsWithNA <- colSums(is.na(training))>0
+#selectedCols <- numericalCols & !colsWithNA
+selectedCols[1:7] <- FALSE
+#selectedCols[1:2] <- FALSE
+```
+
+Pre-processing the datasets
+
+```{r preprocess}
+#preTraining<-training[, !colsWithNA]
+#preTesting<-testing[, !colsWithNA]
+
+preTraining <- training[,selectedCols]
+#preProcessTraining<-preProcess(preTraining)
+#preProcessTraining<-preProcess(preTraining, method="knnImpute")
+preProcessTraining<-preProcess(preTraining, method=c("center","scale","knnImpute"))
+preTraining<-predict(preProcessTraining,preTraining)
+preTraining<-cbind(classe=training$classe, preTraining)
+
+preTesting <- testing[,selectedCols]
+preProcessTesting<-preProcess(preTesting, method=c("center","scale","knnImpute"))
+preTesting<-predict(preProcessTesting,preTesting)
+#preTesting<-predict(preProcessTraining,preTesting)
+preTesting<-cbind(classe=testing$classe, preTesting)
+
+#
+preRawTesting <- rawTesting[,selectedCols]
+#preProcessRawTesting<-preProcess(preRawTesting, method=c("center","scale","knnImpute"))
+#preRawTesting<-predict(preProcessRawTesting,preRawTesting)
+preRawTesting<-predict(preProcessTraining,preRawTesting)
+###preRawTesting<-cbind(classe=testing$classe, preRawTesting)
+#
+```
+
+Now the funny part: model training. After some experimenting with different machine learning algorithms we settled with the random forest one. We also added some code to cache the results...
+
+```{r fit}
+#install.packages("RANN")
+#library(RANN)
+#library(rpart)
+library(randomForest)
+
+#preTraining<-predict(preProcess(training[,numericalCols],method="knnImpute"),training[,numericalCols])
+#preTraining<-predict(preProcess(training[,numericalCols],method="knnImpute"),training)
+#preTraining<-training[complete.cases(training),]
+
+#treebag: package ipred
+#bagFDA: packages earth, mda
+
+#modFit <- train(classe ~ .,method="rpart",data=preTraining)
+#modFit <- train(classe ~ .,method="treebag",data=preTraining)
+#modFit <- train(classe ~ .,method="bagFDA",data=preTraining)
+#modFit <- train(training$classe ~ .,method="rpart",data=preTraining)
+#modFit <- train(classe ~ .,method="rf",data=preTraining)
+#error modFit <- train(classe ~ .,method="glm",data=preTraining)
+
+#system.time({
+#  modFit <- train(classe ~ .,method="rf",data=preTraining)
+#})
+#rpart
+#user  system elapsed
+#464.557  16.775 485.687
+#user  system elapsed
+#470.457  19.476 516.850
+# memory.limit(size=3000)
+
+#rpart with preProcess
+#user  system elapsed
+#26.730   0.436  27.529
+
+#rf
+#user   system  elapsed
+#7962.278   19.801 7991.920
+
+#rf - final
+#user    system   elapsed
+#15736.802    19.005 15776.042
+
+#saveRDS(modFit, file="modFitRF.rds")
+#modFit = readRDS("modFitRF.rds")
+
+if(file.exists('modFitRF.rds') && !exists("modFit")) {
+  modFit = readRDS("modFitRF.rds")
+}
+if(!exists("modFit")) {
+  system.time({
+    modFit <- train(classe ~ .,method="rf",data=preTraining)
+  })
+  #saveRDS(modFit, file="modFitRF.rds")
+  #saveRDS(modFit, file="modFitRF.v2.rds")
+}
+
+```
+
+Printing the model
+
+```{r printmodel}
+print(modFit$finalModel)
+```
+
+Predicting the outcome ("classe") for the training dataset
+
+```{r}
+#preTesting<-testing[complete.cases(testing),]
+#preTesting<-preProcess(testing[,numCols],method="knnImpute")
+#http://stackoverflow.com/questions/20686795/predict-function-for-new-variables-format
+#preTesting<-predict(preProcess(testing[,numCols],method="knnImpute"),testing[,numCols])
+##preProcValues <- predict(preProcess(NewPreVarA, method = c("center", "scale")), NewPreVarA)
+
+testPredict<-predict(modFit,newdata=preTesting,na.action=na.pass)
+length(testPredict);length(preTesting$classe);length(testing$classe)
+confusionMatrix(preTesting$classe,testPredict)
+#confusionMatrix(testing$classe,testPredict)
+
+table(testing$classe,testPredict)
+#table(testPredict)
+#table(testing$classe)
+
+#http://stackoverflow.com/questions/24027605/counting-how-many-na-values-an-r-data-frame-has
+
+sum(is.na(testing))
+sum(!is.na(testing))
+
+na_count <- sapply(testing, function(y) sum(length(which(is.na(y)))))
+notna_count <- sapply(testing, function(y) sum(length(which(!is.na(y)))))
+all_count <- sapply(testing, function(y) sum(length(y)))
+#na_count <- data.frame(na_count)
+all_count_df <- data.frame(na_count,notna_count,all_count,na_count/all_count)
+#na_count
+all_count_df
+dim(testing)
+
+#http://oobaloo.co.uk/visualising-classifier-results-with-ggplot2
+
+#?which
+
+```
+
+We can see that...
+
+And predicting the outcome ("classe") for the `rawTraining` dataset
+
+```{r}
+rawTestPredict<-predict(modFit,newdata=preRawTesting,na.action=na.pass)
+#length(testPredict);length(preTesting$classe);length(testing$classe)
+#confusionMatrix(preTesting$classe,testPredict)
+rawTestPredict
+```
+
+```
+#install.packages(rmarkdown)
+#https://github.com/rstudio/rmarkdown/blob/master/PANDOC.md
+# sudo ln -s /usr/lib/rstudio/bin/pandoc/pandoc /usr/local/bin
+# sudo ln -s /usr/lib/rstudio/bin/pandoc/pandoc-citeproc /usr/local/bin
+#
+library(rmarkdown)
+rmarkdown::render('project-predmachlearn.Rmd')
+#rmarkdown::render('proj/r-sandbox/coursera-predmachlearn/project-predmachlearn.Rmd')
+#https://github.com/rstudio/rmarkdown
+#http://kbroman.org/knitr_knutshell/pages/Rmarkdown.html
+
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(rawTestPredict)
+```
+
+<!-- ======================================== -->
+
+<!--
+> system.time({
++   modFit <- train(training$classe ~ .,method="rf",data=preTraining)
++ })
+Loading required package: randomForest
+randomForest 4.6-10
+Type rfNews() to see new features/changes/bug fixes.
+
+Attaching package: ‘randomForest’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+
+
+^C
+Timing stopped at: 7712.541 3.464 7726.039
+
+#http://topepo.github.io/caret/featureselection.html
+
+#saveRDS(myVariableName, file="myFile.rds")
+#myVariableName = readRDS("myFile.rds")
+
+https://cran.r-project.org/web/views/MachineLearning.html
+http://topepo.github.io/caret/featureselection.html
+http://topepo.github.io/caret/training.html
+
+http://stackoverflow.com/questions/15968494/how-to-delete-columns-with-na-in-r
+http://stackoverflow.com/questions/20686795/predict-function-for-new-variables-format
+
+-->
