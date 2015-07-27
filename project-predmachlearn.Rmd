@@ -19,7 +19,9 @@ Devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* allow users to colle
 
 To that aim, the project collected data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
 
-The goal of this report is to create a machine learning model that may be used to predict the type ("classe") of activity the user was executing based on the accelerometers' iformation. The training data for this project is at [pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and the test data at [pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+The goal of this report is to create a machine learning model that may be used to predict the type ("classe") of activity the user was executing based on the accelerometers' information.
+This report will use the [R language](https://www.r-project.org/) and is a required assingment of the [Practical Machine Learning](https://www.coursera.org/course/predmachlearn) course.
+The training data for this project is at [pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and the test data at [pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
 
 More information about the project can be obtained in the [Human Activity Recognition](http://groupware.les.inf.puc-rio.br/har) project from the *Groupware-LES* research group.
 
@@ -188,18 +190,18 @@ if(!exists("modFit")) {
   #saveRDS(modFit, file="modFitRF.rds")
   #saveRDS(modFit, file="modFitRF.v2.rds")
 }
-
 ```
 
-Now let's show the trained model
+Now let's show the trained model and the relative importance of the variables (`varImp` function)
 
 ```{r printmodel}
+#modFit$results$Accuracy[2]
 print(modFit$finalModel)
 print(modFit)
-#modFit$results$Accuracy[2]
+varImp(modFit)
 ```
 
-We can see that the OOB estimate of error rate is just `1.24%` and an accuracy of `r modFit$results$Accuracy[2]`, which seems quite good.
+We can see that the OOB estimate of error rate is just `1.24%` and the accuracy is `98.19%`, which seems quite good.
 
 
 ## Prediction
@@ -221,9 +223,9 @@ After training the model, it's time to see how it performs with testing data. Le
 ```{r predictTraining}
 testPredict<-predict(modFit,newdata=preTesting,na.action=na.pass)
 #length(testPredict);length(preTesting$classe);length(testing$classe)
+#confusionMatrix(testing$classe,testPredict)
 cf<-confusionMatrix(preTesting$classe,testPredict)
 cf
-#confusionMatrix(testing$classe,testPredict)
 ```
 
 <!--
@@ -261,7 +263,7 @@ Figure 1 shows the confusion table.
 cfdf<-as.data.frame(cf$table)
 cfdf$Reference <- factor(cfdf$Reference, levels = rev(levels(cfdf$Reference)))
 plot <- ggplot(cfdf)
-plot + geom_tile(aes(x=Prediction, y=Reference, fill=Freq)) + scale_fill_gradient(low="white", high="blue")
+plot + geom_tile(aes(x=Prediction, y=Reference, fill=Freq)) + scale_fill_gradient(low="white", high="blue") + labs(title = "Figure 1")
 ```
 
 And now we'll predict the outcome ("classe") for the `rawTraining` dataset
