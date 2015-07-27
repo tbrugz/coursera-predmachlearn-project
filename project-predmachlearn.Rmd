@@ -1,7 +1,7 @@
 ---
 title: "Human Activity Recognition project"
 author: "Telmo Brugnara"
-date: "22-07-2015"
+date: "26-07-2015"
 output: html_document
 ---
 
@@ -15,13 +15,13 @@ http://groupware.les.inf.puc-rio.br/har
 
 ## Introduction
 
-Devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* allow users to collect a large amount of data about personal activity relatively inexpensively. People regularly quantify how much of a particular activity they do, but they rarely quantify how well they do it. The *Groupware@LES* research group created a research project to try to predict how well a person executed weight lifting exercises.
+Devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* allow users to collect a large amount of data about personal activity relatively inexpensively. People regularly quantify how much of a particular activity they do, but they rarely quantify how well they do it. The *Groupware-LES* research group created a research project to try to predict how well a person executed weight lifting exercises.
 
 To that aim, the project collected data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
 
 The goal of this report is to create a machine learning model that may be used to predict the type ("classe") of activity the user was executing based on the accelerometers' iformation. The training data for this project is at [pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and the test data at [pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
 
-More information about the project can be obtained in the [Human Activity Recognition](http://groupware.les.inf.puc-rio.br/har) project from the *Groupware@LES* research group.
+More information about the project can be obtained in the [Human Activity Recognition](http://groupware.les.inf.puc-rio.br/har) project from the *Groupware-LES* research group.
 
 <!--
 ## What you should submit
@@ -33,16 +33,21 @@ The goal of your project is to predict the manner in which they did the exercise
 
 First let's setup the R environment
 
-```{r library, message=FALSE, echo=FALSE}
+```{r library, message=FALSE}
 library(plyr)
 library(dplyr)
 library(ggplot2)
 library(caret)
+library(randomForest)
+```
 
+<!--
+```{r}
+setwd('~/proj/coursera-predmachlearn-project');
 #setwd('~/proj/r-sandbox/coursera-predmachlearn/');
 #setwd('~/Telmo/coursera-data-science/');
 ```
-
+-->
 And download the required training and testing datasets
 
 ```{r download, cache=TRUE}
@@ -70,15 +75,13 @@ if(!exists("rawTesting")) {
 Just showing how many elements of each "classe" the training dataset has
 
 ```{r table}
-##table(rawTraining[,names(rawTraining)=="classe"])
-#   A    B    C    D    E
-#5580 3797 3422 3216 3607
 table(rawTraining$classe)
-#   A    B    C    D    E
-#5580 3797 3422 3216 3607
 ```
 
-Now partitioning the "raw" training set into `training` and `testing`, since the `rawTesting` dataset has no "classe" attribute to validate the model
+
+## Training
+
+Now we will partition the "raw" training set (`rawTraining`) into `training` and `testing`, since the `rawTesting` dataset has no `classe` attribute to validate the model
 
 ```{r partition}
 set.seed(1234)
@@ -91,7 +94,7 @@ testing <- rawTraining[-inTrain,]
 #dim(training)[2]==dim(testing)[2]
 ```
 
-Some feature selection
+Feature selection: selecting only numerical columns and ignoring the first 7 columns that are used to identify the record.
 
 ```{r featureselection}
 numericalCols <- sapply(rawTraining, is.numeric)
@@ -99,18 +102,12 @@ selectedCols <- numericalCols
 #colsWithNA <- colSums(is.na(training))>0
 #selectedCols <- numericalCols & !colsWithNA
 selectedCols[1:7] <- FALSE
-#selectedCols[1:2] <- FALSE
 ```
 
 Pre-processing the datasets
 
 ```{r preprocess}
-#preTraining<-training[, !colsWithNA]
-#preTesting<-testing[, !colsWithNA]
-
 preTraining <- training[,selectedCols]
-#preProcessTraining<-preProcess(preTraining)
-#preProcessTraining<-preProcess(preTraining, method="knnImpute")
 preProcessTraining<-preProcess(preTraining, method=c("center","scale","knnImpute"))
 preTraining<-predict(preProcessTraining,preTraining)
 preTraining<-cbind(classe=training$classe, preTraining)
@@ -121,22 +118,22 @@ preTesting<-predict(preProcessTesting,preTesting)
 #preTesting<-predict(preProcessTraining,preTesting)
 preTesting<-cbind(classe=testing$classe, preTesting)
 
-#
 preRawTesting <- rawTesting[,selectedCols]
 #preProcessRawTesting<-preProcess(preRawTesting, method=c("center","scale","knnImpute"))
 #preRawTesting<-predict(preProcessRawTesting,preRawTesting)
 preRawTesting<-predict(preProcessTraining,preRawTesting)
 ###preRawTesting<-cbind(classe=testing$classe, preRawTesting)
-#
 ```
 
 Now the funny part: model training. After some experimenting with different machine learning algorithms we settled with the random forest one. We also added some code to cache the results...
 
-```{r fit}
+<!--
+
+```{r fit0}
 #install.packages("RANN")
 #library(RANN)
 #library(rpart)
-library(randomForest)
+#library(randomForest)
 
 #preTraining<-predict(preProcess(training[,numericalCols],method="knnImpute"),training[,numericalCols])
 #preTraining<-predict(preProcess(training[,numericalCols],method="knnImpute"),training)
@@ -176,7 +173,11 @@ library(randomForest)
 
 #saveRDS(modFit, file="modFitRF.rds")
 #modFit = readRDS("modFitRF.rds")
+```
 
+-->
+
+```{r fit}
 if(file.exists('modFitRF.rds') && !exists("modFit")) {
   modFit = readRDS("modFitRF.rds")
 }
@@ -190,26 +191,43 @@ if(!exists("modFit")) {
 
 ```
 
-Printing the model
+Now let's show the trained model
 
 ```{r printmodel}
 print(modFit$finalModel)
+print(modFit)
+#modFit$results$Accuracy[2]
 ```
 
-Predicting the outcome ("classe") for the training dataset
+We can see that the OOB estimate of error rate is just `1.24%` and an accuracy of `r modFit$results$Accuracy[2]`, which seems quite good.
 
-```{r}
+
+## Prediction
+
+After training the model, it's time to see how it performs with testing data. Let's see the prediction of the outcome ("classe") for the testing dataset:
+
+<!--
+
+```{r predictTraining0}
 #preTesting<-testing[complete.cases(testing),]
 #preTesting<-preProcess(testing[,numCols],method="knnImpute")
 #http://stackoverflow.com/questions/20686795/predict-function-for-new-variables-format
 #preTesting<-predict(preProcess(testing[,numCols],method="knnImpute"),testing[,numCols])
 ##preProcValues <- predict(preProcess(NewPreVarA, method = c("center", "scale")), NewPreVarA)
+```
 
+-->
+
+```{r predictTraining}
 testPredict<-predict(modFit,newdata=preTesting,na.action=na.pass)
-length(testPredict);length(preTesting$classe);length(testing$classe)
-confusionMatrix(preTesting$classe,testPredict)
+#length(testPredict);length(preTesting$classe);length(testing$classe)
+cf<-confusionMatrix(preTesting$classe,testPredict)
+cf
 #confusionMatrix(testing$classe,testPredict)
+```
 
+<!--
+```{r}
 table(testing$classe,testPredict)
 #table(testPredict)
 #table(testing$classe)
@@ -233,30 +251,44 @@ dim(testing)
 #?which
 
 ```
+-->
 
-We can see that...
+We can see that the accuracy for the testing dataset is a bit lower than the training one, which is expected, but is also high (`r cf$overall[1]`), which is nice.
 
-And predicting the outcome ("classe") for the `rawTraining` dataset
+Figure 1 shows the confusion table.
 
-```{r}
+```{r figureConfusion}
+cfdf<-as.data.frame(cf$table)
+cfdf$Reference <- factor(cfdf$Reference, levels = rev(levels(cfdf$Reference)))
+plot <- ggplot(cfdf)
+plot + geom_tile(aes(x=Prediction, y=Reference, fill=Freq)) + scale_fill_gradient(low="white", high="blue")
+```
+
+And now we'll predict the outcome ("classe") for the `rawTraining` dataset
+
+```{r predictRawTraining}
 rawTestPredict<-predict(modFit,newdata=preRawTesting,na.action=na.pass)
 #length(testPredict);length(preTesting$classe);length(testing$classe)
 #confusionMatrix(preTesting$classe,testPredict)
 rawTestPredict
 ```
 
-```
+As we don't have the actual values for the outcome of the `rawTraining` dataset we can't say for sure that they are correct, but based on the accurary of the previous `training` dataset we can be at least a bit optimistic ;)
+
+<!--
+```{r endNotes}
 #install.packages(rmarkdown)
 #https://github.com/rstudio/rmarkdown/blob/master/PANDOC.md
 # sudo ln -s /usr/lib/rstudio/bin/pandoc/pandoc /usr/local/bin
 # sudo ln -s /usr/lib/rstudio/bin/pandoc/pandoc-citeproc /usr/local/bin
 #
-library(rmarkdown)
-rmarkdown::render('project-predmachlearn.Rmd')
+
+#library(rmarkdown)
+#rmarkdown::render('project-predmachlearn.Rmd')
+
 #rmarkdown::render('proj/r-sandbox/coursera-predmachlearn/project-predmachlearn.Rmd')
 #https://github.com/rstudio/rmarkdown
 #http://kbroman.org/knitr_knutshell/pages/Rmarkdown.html
-
 
 pml_write_files = function(x){
   n = length(x)
@@ -266,8 +298,9 @@ pml_write_files = function(x){
   }
 }
 
-pml_write_files(rawTestPredict)
+#pml_write_files(rawTestPredict)
 ```
+-->
 
 <!-- ======================================== -->
 
@@ -301,5 +334,13 @@ http://topepo.github.io/caret/training.html
 
 http://stackoverflow.com/questions/15968494/how-to-delete-columns-with-na-in-r
 http://stackoverflow.com/questions/20686795/predict-function-for-new-variables-format
+
+http://stackoverflow.com/questions/25045048/reverse-and-change-limit-of-axis
+
+http://docs.ggplot2.org/current/geom_tile.html
+
+http://stackoverflow.com/questions/8784095/r-ggplot-heatmap-using-geom-tile-how-to-sort-by-year-and-show-all-years-in-y
+
+plot + geom_tile(aes(x=Prediction, y=Reference, fill=Freq)) + geom_text(aes(fill = Freq, label = Freq)) + scale_fill_gradient(low="white", high="red")
 
 -->
